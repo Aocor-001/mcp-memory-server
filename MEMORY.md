@@ -1,0 +1,1 @@
+- [Proactive memory search](feedback-proactive-memory-search.md) — Always search MCP memory at conversation start and when relevant to user's question
