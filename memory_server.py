@@ -13,8 +13,8 @@ def _get_collection():
     global _chroma_client, _collection
     if _chroma_client is None:
         from chromadb import PersistentClient
-        _chroma_client = PersistentClient(path="/home/zyy/chroma_data")
-        _collection = _chroma_client.get_or_create_collection("my_memory")
+        _chroma_client = PersistentClient(path="记忆库路径")
+        _collection = _chroma_client.get_or_create_collection("collection")
     return _collection
 
 def _get_model():
