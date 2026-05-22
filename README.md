@@ -35,7 +35,7 @@ pip install -r requirements.txt
 
 ### 手动下载模型
 
-`local_files_only=True`，需预先下载 embedding 模型到本地缓存：
+默认启用 `local_files_only=True`，需预先下载 embedding 模型：
 
 ```bash
 python3 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-base-zh-v1.5')"
@@ -45,7 +45,7 @@ python3 -c "from sentence_transformers import SentenceTransformer; SentenceTrans
 
 ## 配置 Claude Code
 
-### 1. `.mcp.json`（项目根目录）
+### 1. `.mcp.json`
 
 ```json
 {
@@ -53,7 +53,7 @@ python3 -c "from sentence_transformers import SentenceTransformer; SentenceTrans
     "memory": {
       "type": "stdio",
       "command": "python3",
-      "args": [""]
+      "args": ["path/to/memory_server.py"]
     }
   }
 }
@@ -67,18 +67,38 @@ python3 -c "from sentence_transformers import SentenceTransformer; SentenceTrans
 }
 ```
 
-## 使用建议：让记忆真正生效
+### 3. 可选：自动触发记忆搜索
 
-MCP 工具默认不会自动调用——Claude 不会主动搜索记忆。要让它变成真正的 RAG，需要在 Claude Code 的**内置记忆系统**中写入一条引导指令：
+MCP 工具默认不会自动调用。如果希望每次新对话开始时 Claude 自动搜索记忆，可以配置 SessionStart hook，通过 `additionalContext` 注入启动指令：
 
-在 `/home/zyy/.claude/projects/-home-zyy/memory/` 中创建反馈记忆，要求每次对话开始时自动调用 `search_memory`。这样链路变为：
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"会话已启动。立即搜索记忆库，检索用户偏好和历史上下文。\"}}'"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
-> 用户提问 → Claude 自动搜记忆 → 找到相关上下文 → 融入回答
+链路：
 
-具体配置见 `MEMORY.md`。
+> 新会话 → SessionStart hook 注入指令 → Claude 自动搜索记忆 → 融入回答
 
-## 关键点
+## 关键设计决策
 
-- `ServerCapabilities()` **必须**显式声明 `tools=ToolsCapability()`，否则 Claude Code 不会发现工具
-- 所有工具调用都有 `try/except` 错误处理，模型加载或数据库操作失败会返回中文错误信息
-- 项目源文件位于 `mcp-memory-server/`，运行实例部署在 `chroma_data/`
+| 决策 | 原因 |
+|---|---|
+| `local_files_only=True` | 网络不稳定时启动联网认证会超时，模型需手动下载 |
+| `ServerCapabilities` 显式声明 `tools=ToolsCapability()` | 否则 Claude Code 不会发现工具 |
+| `PersistentClient` | 本地持久化，无需额外数据库服务 |
+| SessionStart hook | 比 CLAUDE.md / MEMORY.md 更可靠可控 |
+| embedding 模型懒加载 | 首次调用才加载，减少启动延迟 |
+| try/except 全包裹 | 任何错误返回中文提示，不崩溃 |
